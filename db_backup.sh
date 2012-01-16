@@ -24,11 +24,19 @@
 DATABASES="*"
 DBUSER="root"
 PASSWD=""
-WD="/media/backup/databases"
+HASH="md5 -q"
+WD="./dumps"
 
 ###############################################################################
 # Init                                                                        #
 ###############################################################################
+
+VERBOSE="FALSE"
+
+if [ "$1" == "-v" ]
+then
+  VERBOSE="TRUE"
+fi
 
 cd "${WD}"
 DATETIME=`date "+%Y-%m-%d_%H%M%S"`
@@ -48,17 +56,49 @@ fi
 # Backup                                                                      #
 ###############################################################################
 
-echo "backing up"
+if [ "${VERBOSE}" == "TRUE" ]
+then
+	echo " == Backing up Databases == "
+fi
+
 for DB in ${DATABASES}
 do
     if [[ ${DB} != "information_schema" ]]
     then
-      echo "* ${DB}"
+      mkdir -p ${DB}
+	  if [ "${VERBOSE}" == "TRUE" ]
+	  then
+        printf "> ${DB} "
+      fi
+      
+      # Create database dump
       mysqldump ${LOGIN} ${DB} | sed '$d' > "${DB}_${DATETIME}.sql"
-      tar -czf "${DB}_${DATETIME}.tar.gz" "${DB}_${DATETIME}.sql"
-      rm "${DB}_${DATETIME}.sql"
+      
+      # Check hash towards latest file
+      new_hash=`${HASH} ${DB}_${DATETIME}.sql`
+      last_file=`ls -rt ${DB} | tail -1`
+      old_hash=`${HASH} ${DB}/${last_file} 2>/dev/null`
+      
+      # Check hashes and store new file if there is a change
+      if ! [ "${new_hash}" == "${old_hash}" ]
+	  then
+	    mv "${DB}_${DATETIME}.sql" "${DB}"
+		if [ "${VERBOSE}" == "TRUE" ]
+		then
+	      echo "[SAVED]"
+	    fi
+      else
+	    rm "${DB}_${DATETIME}.sql"
+		if [ "${VERBOSE}" == "TRUE" ]
+		then
+          echo "[NO CHANGES]"
+        fi
+	  fi
     fi
 done
-echo "done"
+if [ "${VERBOSE}" == "TRUE" ]
+then
+  echo " == Done == "
+fi
 
 exit 0
